@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thêm tọa độ vào bản đồ Leaflet</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <!-- Leaflet Routing Machine CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+  <style>
+    #map {
+      height: 600px;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    .form-container {
+      margin-bottom: 10px;
+    }
+    input {
+      padding: 5px;
+      margin-right: 5px;
+      width: 150px;
+    }
+    button {
+      padding: 5px 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>Upload tọa độ từ file CSV</h3>
+
+  <!-- Form tải CSV -->
+  <div class="form-container">
+    <input type="file" id="csvFileInput" accept=".csv">
+    <button onclick="loadCSV()">Tải tọa độ từ CSV</button>
+  </div>
+
+  <!-- Form nhập bán kính vòng tròn -->
+  <div class="form-container">
+    <input type="number" id="radiusInput" placeholder="Nhập bán kính (mét)">
+    <button onclick="updateCircleRadius()">Cập nhật vòng tròn</button>
+  </div>
+
+  <!-- Checkbox list -->
+  <div id="checkboxContainer">
+    <h4>Chọn các địa điểm để vẽ đường</h4>
+  </div>
+  <button onclick="drawRoute()">Vẽ đường nối</button>
+  <button onclick="clearLine()">Xóa đường nối</button>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+  <script>
+    let polylines = [];
+    const centerLat = 21.0143;
+    const centerLng = 105.8084;
+    let RADIUS = 500;
+
+    let locations = [];
+
+    const map = L.map("map").setView([centerLat, centerLng], 15);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let circle = L.circle([centerLat, centerLng], {
+      color: "blue",
+      fillColor: "#3399ff",
+      fillOpacity: 0.2,
+      radius: RADIUS
+    }).addTo(map);
+
+    function addMarkerToMap(lat, lng, title) {
+      const marker = L.marker([lat, lng]).addTo(map);
+      marker.bindPopup(`<b>${title}</b><br>(${lat}, ${lng})`);
+    
+      const container = document.getElementById("checkboxContainer");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = JSON.stringify({ lat, lng });
+      checkbox.id = `${lat}-${lng}`;
+      
+      const label = document.createElement("label");
+      label.htmlFor = checkbox.id;
+      label.innerText = title;
+    
+      container.appendChild(checkbox);
+      container.appendChild(label);
+      container.appendChild(document.createElement("br"));
+    }
+
+    function updateCircleRadius() {
+      const newRadius = parseInt(document.getElementById("radiusInput").value);
+      if (isNaN(newRadius) || newRadius <= 0) {
+        alert("Vui lòng nhập bán kính hợp lệ (lớn hơn 0)!");
+        return;
+      }
+      RADIUS = newRadius;
+      map.removeLayer(circle);
+      circle = L.circle([centerLat, centerLng], {
+        color: "blue",
+        fillColor: "#3399ff",
+        fillOpacity: 0.2,
+        radius: RADIUS
+      }).addTo(map);
+    }
+
+    // Load CSV
+    function loadCSV() {
+      const fileInput = document.getElementById("csvFileInput");
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Vui lòng chọn file CSV!");
+        return;
+      }
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          results.data.forEach(row => {
+            const lat = parseFloat(row.lat);
+            const lng = parseFloat(row.lng);
+            const title = row.title || "Điểm từ CSV";
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+              locations.push({ lat, lng, title });
+              addMarkerToMap(lat, lng, title);
+            }
+          });
+          alert("Đã tải xong CSV và hiển thị lên bản đồ!");
+        },
+        error: function(err) {
+          alert("Lỗi đọc file CSV: " + err.message);
+        }
+      });
+    }
+    
+    let routingControl;
+
+    function drawRoute() {
+      let selectedPoints = [];
+      document.querySelectorAll("#checkboxContainer input:checked").forEach(checkbox => {
+          let coords = JSON.parse(checkbox.value);
+          selectedPoints.push(L.latLng(coords.lat, coords.lng));
+      });
+  
+      if (selectedPoints.length < 2) {
+          alert("Vui lòng chọn ít nhất 2 điểm để tìm đường.");
+          return;
+      }
+  
+      if (routingControl) {
+          map.removeControl(routingControl);
+      }
+  
+      routingControl = L.Routing.control({
+          waypoints: selectedPoints,
+          routeWhileDragging: true
+      }).addTo(map);
+    }
+
+    function clearLine() {
+      if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+    }
+  </script>
+</body>
+</html>
